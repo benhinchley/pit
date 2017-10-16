@@ -1,0 +1,80 @@
+{
+    "memo": "3f493d4682f16d0f61320f912d573f96e7c31bc595eca97ee74f1ccd34e53912",
+    "projects": [
+        {
+            "name": "github.com/sergi/go-diff",
+            "branch": "master",
+            "revision": "feef008d51ad2b3778f85d387ccf91735543008d",
+            "packages": [
+                "diffmatchpatch"
+            ]
+        },
+        {
+            "name": "github.com/src-d/gcfg",
+            "version": "v1.3.0",
+            "revision": "f187355171c936ac84a82793659ebb4936bc1c23",
+            "packages": [
+                ".",
+                "scanner",
+                "token",
+                "types"
+            ]
+        },
+        {
+            "name": "golang.org/x/crypto",
+            "branch": "master",
+            "revision": "9419663f5a44be8b34ca85f08abc5fe1be11f8a3",
+            "packages": [
+                "curve25519",
+                "ed25519",
+                "ed25519/internal/edwards25519",
+                "ssh",
+                "ssh/agent"
+            ]
+        },
+        {
+            "name": "gopkg.in/src-d/go-git.v4",
+            "version": "v4.0.0-rc5",
+            "revision": "c9353b2bd7c1cbdf8f78dad6deac64ed2f2ed9eb",
+            "packages": [
+                ".",
+                "config",
+                "plumbing",
+                "plumbing/format/config",
+                "plumbing/format/idxfile",
+                "plumbing/format/index",
+                "plumbing/format/objfile",
+                "plumbing/format/packfile",
+                "plumbing/format/pktline",
+                "plumbing/object",
+                "plumbing/protocol/packp",
+                "plumbing/protocol/packp/capability",
+                "plumbing/protocol/packp/sideband",
+                "plumbing/storer",
+                "plumbing/transport",
+                "plumbing/transport/client",
+                "plumbing/transport/file",
+                "plumbing/transport/git",
+                "plumbing/transport/http",
+                "plumbing/transport/internal/common",
+                "plumbing/transport/ssh",
+                "storage/filesystem",
+                "storage/filesystem/internal/dotgit",
+                "storage/memory",
+                "utils/binary",
+                "utils/diff",
+                "utils/fs",
+                "utils/fs/os",
+                "utils/ioutil"
+            ]
+        },
+        {
+            "name": "gopkg.in/warnings.v0",
+            "version": "v0.1.1",
+            "revision": "8a331561fe74dadba6edfc59f3be66c22c3b065d",
+            "packages": [
+                "."
+            ]
+        }
+    ]
+}

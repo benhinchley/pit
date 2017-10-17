@@ -9,9 +9,7 @@ import (
 )
 
 type Package struct {
-	Name    string
-	Sources []string
-	Tests   []string
+	Name string
 }
 
 func Packages() ([]Package, error) {
@@ -27,39 +25,27 @@ func Packages() ([]Package, error) {
 
 	pkgs := strings.Split(strings.TrimSpace(out.String()), "\n")
 	for _, pkg := range pkgs {
-		s, err := sourceFiles(pkg)
-		if err != nil {
-			return result, fmt.Errorf("unable to get source files for %s: %s", pkg, err)
-		}
-
-		t, err := testFiles(pkg)
-		if err != nil {
-			return result, fmt.Errorf("unable to get test files for %s: %s", pkg, err)
-		}
-
 		result = append(result, Package{
-			Name:    pkg,
-			Sources: s,
-			Tests:   t,
+			Name: pkg,
 		})
 	}
 
 	return result, nil
 }
 
-func sourceFiles(pkg string) ([]string, error) {
+func (p Package) Sources() ([]string, error) {
 	result := []string{}
-	cmd := exec.Command("go", "list", "-f", "'{{ join .GoFiles \",\" }}'", pkg)
+	cmd := exec.Command("go", "list", "-f", "'{{ join .GoFiles \",\" }}'", p.Name)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
 	if err := cmd.Run(); err != nil {
-		return result, fmt.Errorf("unable to run \"go list -f '{{ join .GoFiles \",\" }}' %s\": %s", pkg, err)
+		return result, fmt.Errorf("unable to run \"go list -f '{{ join .GoFiles \",\" }}' %s\": %s", p.Name, err)
 	}
 
-	re, err := regexp.Compile(`(\w+.\w+)`)
+	re, err := regexp.Compile(`(\w+.go)`)
 	if err != nil {
-		return result, fmt.Errorf("unable to compile regex `(\\w+.\\w+)`: %s", err)
+		return result, fmt.Errorf("unable to compile regex `(\\w+.go)`: %s", err)
 	}
 	for _, match := range re.FindAllString(strings.TrimSpace(out.String()), -1) {
 		result = append(result, match)
@@ -68,20 +54,20 @@ func sourceFiles(pkg string) ([]string, error) {
 	return result, nil
 }
 
-func testFiles(pkg string) ([]string, error) {
+func (p Package) Tests() ([]string, error) {
 	result := []string{}
 
-	cmd := exec.Command("go", "list", "-f", "'{{ join .TestGoFiles \",\" }}'", pkg)
+	cmd := exec.Command("go", "list", "-f", "'{{ join .TestGoFiles \",\" }}'", p.Name)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
 	if err := cmd.Run(); err != nil {
-		return result, fmt.Errorf("unable to run \"go list -f '{{ join .TestGoFiles \",\" }}' %s\": %s", pkg, err)
+		return result, fmt.Errorf("unable to run \"go list -f '{{ join .TestGoFiles \",\" }}' %s\": %s", p.Name, err)
 	}
 
-	re, err := regexp.Compile(`(\w+.\w+)`)
+	re, err := regexp.Compile(`(\w+.go)`)
 	if err != nil {
-		return result, fmt.Errorf("unable to compile regex `(\\w+.\\w+)`: %s", err)
+		return result, fmt.Errorf("unable to compile regex `(\\w+.go)`: %s", err)
 	}
 	for _, match := range re.FindAllString(strings.TrimSpace(out.String()), -1) {
 		result = append(result, match)

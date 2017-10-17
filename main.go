@@ -57,14 +57,25 @@ func (c *Config) Run(args []string) int {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		return 1
 	}
-	// fmt.Fprintf(os.Stderr, "changed files: %+v\n", cf)
-	cp := changedPackages(cf)
-	// fmt.Fprintf(os.Stderr, "changed pkgs: %+v\n", cp)
 
+	if len(cf) == 0 {
+		fmt.Fprintf(os.Stderr, "no changes")
+		return 0
+	}
+
+	cp := changedPackages(cf)
+
+	// TODO: Setup some sort of work pool for this
 	for _, chpkg := range cp {
 		for _, pkg := range c.Packages {
 			if pkg.Name == chpkg {
-				if len(pkg.Tests) == 0 {
+				tests, err := pkg.Tests()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "unable to get test files for %s: %s", pkg.Name, err)
+					continue
+				}
+
+				if len(tests) == 0 {
 					fmt.Fprintf(os.Stderr, "no tests for %s\n", pkg.Name)
 					continue
 				}
@@ -123,14 +134,14 @@ func Filter(vs []string, f func(string) bool) []string {
 	return r
 }
 
-func RemoveDuplicates(s []string) []string {
-	seen := map[string]bool{}
+func RemoveDuplicates(d []string) []string {
+	s := map[string]bool{}
 	r := []string{}
 
-	for v := range s {
-		if seen[s[v]] != true {
-			seen[s[v]] = true
-			r = append(r, s[v])
+	for v := range d {
+		if s[d[v]] != true {
+			s[d[v]] = true
+			r = append(r, d[v])
 		}
 	}
 	return r

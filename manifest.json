@@ -1,1 +1,7 @@
-{}
+{
+    "dependencies": {
+        "gopkg.in/src-d/go-git.v4": {
+            "version": "v4.0.0-rc15"
+        }
+    }
+}

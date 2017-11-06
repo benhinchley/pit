@@ -9,12 +9,13 @@ import (
 	"path/filepath"
 
 	"github.com/benhinchley/cmd"
+	"github.com/benhinchley/pit"
 
 	git "gopkg.in/src-d/go-git.v4"
 )
 
 func main() {
-	p, err := cmd.NewProgram("pit", "smartish wrapper around go test", &pitCommand{}, []cmd.Command{})
+	p, err := cmd.NewProgram("pit", "smartish wrapper around go test", &pitCommand{}, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -36,7 +37,7 @@ func main() {
 
 		p, _ := filepath.Rel(filepath.Join(build.Default.GOPATH, "src"), wd)
 
-		pkgs, err := packages()
+		pkgs, err := pit.Packages()
 		if err != nil {
 			return fmt.Errorf("%s: unable to list packages: %v", c.Name(), err)
 		}
@@ -66,7 +67,7 @@ type context struct {
 	WorkingDir           string
 	WDPackage            string
 	Repository           *git.Repository
-	Packages             []Package
+	Packages             []pit.Package
 	RawStdout, RawStderr io.Writer
 
 	out, err *log.Logger

@@ -1,118 +1,107 @@
-package main
+package pit
 
 import (
-	"flag"
+	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
-	"path"
-	"path/filepath"
+	"regexp"
 	"strings"
-
-	"github.com/benhinchley/cmd"
-
-	git "gopkg.in/src-d/go-git.v4"
 )
 
-type pitCommand struct{}
+type Package struct {
+	Name string
+}
 
-func (cmd *pitCommand) Name() string           { return "pit" }
-func (cmd *pitCommand) Args() string           { return "" }
-func (cmd *pitCommand) Desc() string           { return "smartish wrapper around go test" }
-func (cmd *pitCommand) Help() string           { return "TODO" }
-func (cmd *pitCommand) Register(*flag.FlagSet) {}
+func Packages() ([]Package, error) {
+	result := []Package{}
 
-func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
-	cf, err := changedFiles(ctx.(*context).WDPackage, ctx.(*context).Repository)
+	cmd := exec.Command("go", "list", "./...")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	if err := cmd.Run(); err != nil {
+		return result, fmt.Errorf("unable to run \"go list ./...\": %s", err)
+	}
+
+	pkgs := strings.Split(strings.TrimSpace(out.String()), "\n")
+	for _, pkg := range pkgs {
+		result = append(result, Package{
+			Name: pkg,
+		})
+	}
+
+	return result, nil
+}
+
+func (p Package) Sources() ([]string, error) {
+	result := []string{}
+	cmd := exec.Command("go", "list", "-f", "'{{ join .GoFiles \",\" }}'", p.Name)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	if err := cmd.Run(); err != nil {
+		return result, fmt.Errorf("unable to run \"go list -f '{{ join .GoFiles \",\" }}' %s\": %s", p.Name, err)
+	}
+
+	re, err := regexp.Compile(`(\w+.go)`)
 	if err != nil {
-		return fmt.Errorf("%s: %v", cmd.Name(), err)
+		return result, fmt.Errorf("unable to compile regex `(\\w+.go)`: %s", err)
+	}
+	for _, match := range re.FindAllString(strings.TrimSpace(out.String()), -1) {
+		result = append(result, match)
 	}
 
-	if len(cf) == 0 {
-		ctx.Stderr().Println("no changes")
-		return nil
-	}
-
-	cp := changedPackages(cf)
-
-	// TODO: Setup some sort of work pool for this
-	for _, chpkg := range cp {
-		for _, pkg := range ctx.(*context).Packages {
-			if pkg.Name == chpkg {
-				tests, err := pkg.Tests()
-				if err != nil {
-					ctx.Stderr().Printf("unable to get test files for %s: %v", pkg.Name, err)
-					continue
-				}
-
-				if len(tests) == 0 {
-					fmt.Fprintf(os.Stderr, "no tests for %s\n", pkg.Name)
-					continue
-				}
-				gtc := exec.Command("go", "test", "-v", "-cover", pkg.Name)
-				gtc.Stdout = ctx.(*context).RawStdout
-				gtc.Stderr = ctx.(*context).RawStderr
-
-				if err := gtc.Run(); err != nil {
-					ctx.Stderr().Printf("unable to run \"go test -v -cover %s\": %v\n", pkg.Name, err)
-				}
-			}
-		}
-	}
-
-	return nil
+	return result, nil
 }
 
-func changedFiles(p string, r *git.Repository) ([]string, error) {
-	f := []string{}
-	w, err := r.Worktree()
+func (p Package) Tests() ([]string, error) {
+	result := []string{}
+
+	cmd := exec.Command("go", "list", "-f", "'{{ join .TestGoFiles \",\" }}'", p.Name)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	if err := cmd.Run(); err != nil {
+		return result, fmt.Errorf("unable to run \"go list -f '{{ join .TestGoFiles \",\" }}' %s\": %s", p.Name, err)
+	}
+
+	re, err := regexp.Compile(`(\w+.go)`)
 	if err != nil {
-		return f, fmt.Errorf("unable to get repository worktree: %s", err)
+		return result, fmt.Errorf("unable to compile regex `(\\w+.go)`: %s", err)
 	}
-	s, err := w.Status()
-	if err != nil {
-		return f, fmt.Errorf("unable to worktree status: %s", err)
+	for _, match := range re.FindAllString(strings.TrimSpace(out.String()), -1) {
+		result = append(result, match)
 	}
 
-	for file, status := range s {
-		if status.Worktree != git.Unmodified {
-			f = append(f, filepath.Join(p, strings.TrimRight(file, ",")))
-		}
-	}
-	f = filter(f, func(s string) bool {
-		return path.Ext(s) == ".go"
-	})
-
-	return f, nil
+	return result, nil
 }
 
-func changedPackages(f []string) []string {
-	r := []string{}
-	for _, file := range f {
-		r = append(r, filepath.Dir(file))
-	}
-	return removeDuplicates(r)
-}
+func NamedDiffFiles(files []string) ([]string, error) {
+	args := []string{"add", "-N"}
+	args = append(args, files...)
 
-func filter(vs []string, f func(string) bool) []string {
-	r := make([]string, 0)
-	for _, v := range vs {
-		if f(v) {
-			r = append(r, v)
-		}
-	}
-	return r
-}
+	cmd := exec.Command("git", args...)
 
-func removeDuplicates(d []string) []string {
-	s := map[string]bool{}
-	r := []string{}
-
-	for v := range d {
-		if s[d[v]] != true {
-			s[d[v]] = true
-			r = append(r, d[v])
-		}
+	if err := cmd.Run(); err != nil {
+		return []string{}, fmt.Errorf("unable to run \"git add -N %s\": %s", strings.Join(args, " "), err)
 	}
-	return r
+
+	args = []string{"diff", "--name-only", "HEAD"}
+	cmd = exec.Command("git", args...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	if err := cmd.Run(); err != nil {
+		return []string{}, fmt.Errorf("unable to run \"git diff --name-only HEAD\": %s", err)
+	}
+
+	r := strings.Split(strings.TrimSpace(out.String()), "\n")
+
+	cmd = exec.Command("git", "reset")
+
+	if err := cmd.Run(); err != nil {
+		return []string{}, fmt.Errorf("unable to run \"git reset\": %s", err)
+	}
+
+	return r, nil
 }

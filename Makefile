@@ -12,7 +12,7 @@ test: $(TESTS)
 
 build: bin/$(BINARY)
 bin/$(BINARY): $(SRC)
-	@go build -o $@ .
+	@go build -o $@ ./cmd/$(BINARY)
 	
 deps:
 	@dep ensure

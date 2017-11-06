@@ -7,8 +7,8 @@ format: $(SRC)
 	@goimports -w $?
 	@gofmt -s -w $?
 
-test: $(TESTS)
-	@go test -v -cover $(SRC) $(TESTS)
+test: build $(TESTS)
+	@./bin/pit
 
 build: bin/$(BINARY)
 bin/$(BINARY): $(SRC)

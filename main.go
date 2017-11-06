@@ -3,146 +3,74 @@ package main
 import (
 	"fmt"
 	"go/build"
+	"io"
+	"log"
 	"os"
-	"os/exec"
-	"path"
 	"path/filepath"
-	"strings"
+
+	"github.com/benhinchley/cmd"
 
 	git "gopkg.in/src-d/go-git.v4"
 )
 
 func main() {
-	wd, err := os.Getwd()
+	p, err := cmd.NewProgram("pit", "smartish wrapper around go test", &pitCommand{}, []cmd.Command{})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to get working directory: %s\n", err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	r, err := git.PlainOpen(wd)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to open repository: %s\n", err)
+	if err := p.ParseArgs(os.Args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if err := p.Run(func(env cmd.Environment, c cmd.Command, args []string) error {
+		stdout, stderr := env.GetLoggers()
+		wd := env.WorkingDir()
 
-	p, _ := filepath.Rel(filepath.Join(build.Default.GOPATH, "src"), wd)
+		//TODO: search for `.git` dir in wd, then search upwards until we hit $GOPATH
 
-	pkgs, err := Packages()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "unable to list packages: %s\n", err)
+		r, err := git.PlainOpen(wd)
+		if err != nil {
+			return fmt.Errorf("%s: unable to open repository: %v", c.Name(), err)
+		}
+
+		p, _ := filepath.Rel(filepath.Join(build.Default.GOPATH, "src"), wd)
+
+		pkgs, err := packages()
+		if err != nil {
+			return fmt.Errorf("%s: unable to list packages: %v", c.Name(), err)
+		}
+
+		rstdout, rstderr := env.GetStdio()
+		ctx := &context{
+			WorkingDir: wd,
+			WDPackage:  p,
+			Repository: r,
+			Packages:   pkgs,
+			RawStdout:  rstdout,
+			RawStderr:  rstderr,
+			out:        stdout,
+			err:        stderr,
+		}
+		if err := c.Run(ctx, args); err != nil {
+			return fmt.Errorf("%s: %v", c.Name(), err)
+		}
+		return nil
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
-	c := &Config{
-		WorkingDir:        wd,
-		WorkingDirPackage: p,
-		Repository:        r,
-		Packages:          pkgs,
-	}
-
-	os.Exit(c.Run(os.Args[1:]))
 }
 
-type Config struct {
-	WorkingDir        string
-	WorkingDirPackage string
-	Repository        *git.Repository
-	Packages          []Package
+type context struct {
+	WorkingDir           string
+	WDPackage            string
+	Repository           *git.Repository
+	Packages             []Package
+	RawStdout, RawStderr io.Writer
+
+	out, err *log.Logger
 }
 
-func (c *Config) Run(args []string) int {
-	// ref, _ := c.Repository.Head() // ref.Hash().String()[:7]
-	cf, err := changedFiles(c.WorkingDirPackage, c.Repository)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		return 1
-	}
-
-	if len(cf) == 0 {
-		fmt.Fprintf(os.Stderr, "no changes")
-		return 0
-	}
-
-	cp := changedPackages(cf)
-
-	// TODO: Setup some sort of work pool for this
-	for _, chpkg := range cp {
-		for _, pkg := range c.Packages {
-			if pkg.Name == chpkg {
-				tests, err := pkg.Tests()
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "unable to get test files for %s: %s", pkg.Name, err)
-					continue
-				}
-
-				if len(tests) == 0 {
-					fmt.Fprintf(os.Stderr, "no tests for %s\n", pkg.Name)
-					continue
-				}
-				cmd := exec.Command("go", "test", "-v", "-cover", pkg.Name)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-
-				if err := cmd.Run(); err != nil {
-					fmt.Fprintf(os.Stderr, "unable to run \"go test -v -cover %s\": %s", pkg.Name, err)
-				}
-			}
-		}
-	}
-
-	return 0
-}
-
-func changedFiles(p string, r *git.Repository) ([]string, error) {
-	f := []string{}
-	w, err := r.Worktree()
-	if err != nil {
-		return f, fmt.Errorf("unable to get repository worktree: %s", err)
-	}
-	s, err := w.Status()
-	if err != nil {
-		return f, fmt.Errorf("unable to worktree status: %s", err)
-	}
-
-	for file, status := range s {
-		if status.Worktree != git.Unmodified {
-			f = append(f, filepath.Join(p, strings.TrimRight(file, ",")))
-		}
-	}
-	f = Filter(f, func(s string) bool {
-		return path.Ext(s) == ".go"
-	})
-
-	return f, nil
-}
-
-func changedPackages(f []string) []string {
-	r := []string{}
-	for _, file := range f {
-		r = append(r, filepath.Dir(file))
-	}
-	return RemoveDuplicates(r)
-}
-
-func Filter(vs []string, f func(string) bool) []string {
-	r := make([]string, 0)
-	for _, v := range vs {
-		if f(v) {
-			r = append(r, v)
-		}
-	}
-	return r
-}
-
-func RemoveDuplicates(d []string) []string {
-	s := map[string]bool{}
-	r := []string{}
-
-	for v := range d {
-		if s[d[v]] != true {
-			s[d[v]] = true
-			r = append(r, d[v])
-		}
-	}
-	return r
-}
+func (c *context) Stdout() *log.Logger { return c.out }
+func (c *context) Stderr() *log.Logger { return c.err }

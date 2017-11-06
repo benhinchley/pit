@@ -12,7 +12,7 @@ type Package struct {
 	Name string
 }
 
-func Packages() ([]Package, error) {
+func packages() ([]Package, error) {
 	result := []Package{}
 
 	cmd := exec.Command("go", "list", "./...")
@@ -76,7 +76,7 @@ func (p Package) Tests() ([]string, error) {
 	return result, nil
 }
 
-func NamedDiffFiles(files []string) ([]string, error) {
+func namedDiffFiles(files []string) ([]string, error) {
 	args := []string{"add", "-N"}
 	args = append(args, files...)
 

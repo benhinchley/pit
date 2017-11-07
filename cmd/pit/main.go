@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"go/build"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -42,14 +41,11 @@ func main() {
 			return fmt.Errorf("%s: unable to list packages: %v", c.Name(), err)
 		}
 
-		rstdout, rstderr := env.GetStdio()
 		ctx := &context{
 			WorkingDir: wd,
 			WDPackage:  p,
 			Repository: r,
 			Packages:   pkgs,
-			RawStdout:  rstdout,
-			RawStderr:  rstderr,
 			out:        stdout,
 			err:        stderr,
 		}
@@ -64,11 +60,10 @@ func main() {
 }
 
 type context struct {
-	WorkingDir           string
-	WDPackage            string
-	Repository           *git.Repository
-	Packages             []pit.Package
-	RawStdout, RawStderr io.Writer
+	WorkingDir string
+	WDPackage  string
+	Repository *git.Repository
+	Packages   []pit.Package
 
 	out, err *log.Logger
 }

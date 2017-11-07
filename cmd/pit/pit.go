@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/benhinchley/pit/internals/testparser"
 
 	"github.com/benhinchley/cmd"
 
@@ -48,13 +52,24 @@ func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
 					ctx.Stderr().Printf("no tests for %s\n", pkg.Name)
 					continue
 				}
-				gtc := exec.Command("go", "test", "-v", "-cover", pkg.Name)
-				gtc.Stdout = ctx.(*context).RawStdout
-				gtc.Stderr = ctx.(*context).RawStderr
 
-				if err := gtc.Run(); err != nil {
-					ctx.Stderr().Printf("unable to run \"go test -v -cover %s\": %v\n", pkg.Name, err)
+				var b bytes.Buffer
+				gtc := exec.Command("go", "test", "-v", "-cover", pkg.Name)
+				gtc.Stdout = &b
+				gtc.Stderr = &b
+				gtc.Run()
+
+				r, err := testparser.Parse(&b)
+				if err != nil {
+					return fmt.Errorf("unable to parse test output: %v", err)
 				}
+
+				out, err := json.MarshalIndent(r, "", " ")
+				if err != nil {
+					return fmt.Errorf("unable to marshal output: %v", err)
+				}
+
+				ctx.Stdout().Print(string(out))
 			}
 		}
 	}

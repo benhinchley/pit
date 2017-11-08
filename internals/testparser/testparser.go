@@ -103,23 +103,22 @@ const (
 
 // var debug = log.New(os.Stderr, "testparser: ", 0)
 
-func Parse(r io.Reader) (*TestPackage, error) {
-	var pkg *TestPackage
+func Parse(r io.Reader) ([]*TestPackage, error) {
+	var pkgs []*TestPackage
 	tests := []*Test{}
 	scanner := bufio.NewScanner(r)
 
 	duration := func(d string) string {
-		var o string
-		if d == "" {
-			o = "0s"
-		} else {
-			o = d + "s"
+		switch d {
+		case "":
+			return "0s"
+		default:
+			return d + "s"
 		}
-		return o
 	}
 
 	var (
-		currentTest        string
+		currentTestName    string
 		coveragePercentage float32
 		fails              = []*FailLine{}
 	)
@@ -130,8 +129,8 @@ func Parse(r io.Reader) (*TestPackage, error) {
 		if RegexTest.MatchString(line) {
 			matches := RegexTest.FindStringSubmatch(line)
 			// debug.Println("RegexTest Matches:", litter.Sdump(matches))
-			currentTest = strings.TrimSpace(matches[1])
-			tests = append(tests, &Test{Name: currentTest})
+			currentTestName = strings.TrimSpace(matches[1])
+			tests = append(tests, &Test{Name: currentTestName})
 		} else if RegexResult.MatchString(line) {
 			matches := RegexResult.FindStringSubmatch(line)
 			// debug.Println("RegexResult Matches:", litter.Sdump(matches))
@@ -141,7 +140,7 @@ func Parse(r io.Reader) (*TestPackage, error) {
 				return nil, fmt.Errorf("testparser: unable to parse duration: %v", err)
 			}
 
-			pkg = &TestPackage{
+			pkg := &TestPackage{
 				Name:     matches[2],
 				Status:   toStatus(matches[1]),
 				Coverage: coveragePercentage,
@@ -157,14 +156,15 @@ func Parse(r io.Reader) (*TestPackage, error) {
 				pkg.Output = fails
 			}
 
+			pkgs = append(pkgs, pkg)
 			tests = []*Test{}
-			currentTest = ""
+			currentTestName = ""
 			coveragePercentage = 0.0
 		} else if RegexStatus.MatchString(line) {
 			matches := RegexStatus.FindStringSubmatch(line)
 			// debug.Println("RegexStatus Matches:", litter.Sdump(matches))
 
-			if t := getTest(tests, currentTest); t != nil {
+			if t := getTest(tests, currentTestName); t != nil {
 				d, err := time.ParseDuration(duration(matches[3]))
 				if err != nil {
 					return nil, fmt.Errorf("testparser: RegexStatus: unable to parse duration: %v", err)
@@ -183,7 +183,7 @@ func Parse(r io.Reader) (*TestPackage, error) {
 			matches := RegexOuput.FindStringSubmatch(line)
 			// debug.Println("RegexOutput Matches:", litter.Sdump(matches))
 
-			if t := getTest(tests, currentTest); t != nil {
+			if t := getTest(tests, currentTestName); t != nil {
 				fmt.Fprintln(&t.Output, matches[2])
 			}
 		} else if RegexFail.MatchString(line) {
@@ -204,7 +204,7 @@ func Parse(r io.Reader) (*TestPackage, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("testparser: unable to parse input: %v", err)
 	}
-	return pkg, nil
+	return pkgs, nil
 }
 
 func getTest(tests []*Test, name string) *Test {

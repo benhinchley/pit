@@ -33,8 +33,8 @@ func (cmd *pitCommand) Args() string { return "[-f format] [-json]" }
 func (cmd *pitCommand) Desc() string { return "smartish wrapper around go test" }
 func (cmd *pitCommand) Help() string { return "TODO" }
 func (cmd *pitCommand) Register(fs *flag.FlagSet) {
-	fs.StringVar(&cmd.template, "f", strings.TrimSpace(defaultTemplate), "output template")
 	fs.BoolVar(&cmd.all, "all", false, "run all tests.")
+	fs.StringVar(&cmd.template, "f", "", "output template")
 	fs.BoolVar(&cmd.json, "json", false, "print test result data in json format.")
 }
 
@@ -58,6 +58,8 @@ func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
 	tmpl := cmd.template
 	if cmd.json {
 		tmpl = "{{tojson .}}"
+	} else if tmpl == "" {
+		tmpl = strings.TrimSpace(defaultTemplate)
 	}
 
 	t, err := tfortools.CreateTemplate("pit", tmpl, ctx.(*context).TemplateConfig)

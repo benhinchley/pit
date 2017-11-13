@@ -16,7 +16,11 @@ import (
 var defaultTemplate = `
 {{tablex (cols . "Name" "Status" "Duration" "Coverage" "Summary") 8 8 4 "Package" }}
 
-{{- range . -}}{{if gt (len .Tests) 0}}
+{{- range . -}}{{if gt (len .Errors) 0}}
+Package: {{println .Name}}
+{{- range .Errors -}}{{println .}}{{end}}{{- end}}
+
+{{- if gt (len .Tests) 0}}
 Package: {{println .Name}}
 {{- cols .Tests "Name" "Duration" "Status" | table}}
 {{- end}}{{- end}}

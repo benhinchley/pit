@@ -216,7 +216,6 @@ func getTest(tests []*Test, name string) *Test {
 }
 
 func toStatus(s string) Status {
-	// debug.Println(s)
 	switch strings.ToLower(s) {
 	case "fail", "failed":
 		return StatusFail

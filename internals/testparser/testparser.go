@@ -24,24 +24,24 @@ var (
 	RegexFail     = regexp.MustCompile(`(.*\w+.go)*:(\d+):(\d+):(.*\w+)`)
 )
 
-type TestPackage struct {
+type PackageResult struct {
 	Name     string        `json:"name"`
 	Status   Status        `json:"status"`
-	Summary  string        `json:"summary"`
 	Duration time.Duration `json:"duration"`
 	Coverage float32       `json:"coverage"`
+	Summary  string        `json:"summary"`
 	Tests    []*Test       `json:"tests"`
 	Output   []*FailLine   `json:"-"`
 }
 
-func (tp *TestPackage) MarshalJSON() ([]byte, error) {
-	type Alias TestPackage
+func (pr *PackageResult) MarshalJSON() ([]byte, error) {
+	type Alias PackageResult
 	return json.Marshal(&struct {
 		Duration string `json:"duration"`
 		*Alias
 	}{
-		Duration: tp.Duration.String(),
-		Alias:    (*Alias)(tp),
+		Duration: pr.Duration.String(),
+		Alias:    (*Alias)(pr),
 	})
 }
 
@@ -84,10 +84,8 @@ func (s Status) String() string {
 		return "FAIL"
 	case StatusPass:
 		return "PASS"
-	case StatusSkip:
-		return "SKIP"
 	default:
-		return ""
+		return "SKIP"
 	}
 }
 
@@ -103,8 +101,9 @@ const (
 
 // var debug = log.New(os.Stderr, "testparser: ", 0)
 
-func Parse(r io.Reader) ([]*TestPackage, error) {
-	var pkgs []*TestPackage
+// Parse ...
+func Parse(r io.Reader) ([]*PackageResult, error) {
+	var pkgs []*PackageResult
 	tests := []*Test{}
 	scanner := bufio.NewScanner(r)
 
@@ -140,7 +139,7 @@ func Parse(r io.Reader) ([]*TestPackage, error) {
 				return nil, fmt.Errorf("testparser: unable to parse duration: %v", err)
 			}
 
-			pkg := &TestPackage{
+			pkg := &PackageResult{
 				Name:     matches[2],
 				Status:   toStatus(matches[1]),
 				Coverage: coveragePercentage,

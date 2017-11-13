@@ -3,7 +3,7 @@ TESTS := $(shell find . -name "*_test.go" -not -path "./vendor/*")
 
 BINARY=pit
 
-format: $(SRC)
+format: $(SRC) $(TESTS)
 	@goimports -w $?
 	@gofmt -s -w $?
 

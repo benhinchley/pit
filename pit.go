@@ -1,107 +1,220 @@
+// Package pit ...
 package pit
 
 import (
 	"bytes"
 	"fmt"
+	"go/build"
+	"log"
+	"os"
 	"os/exec"
-	"regexp"
+	"path"
+	"path/filepath"
 	"strings"
+
+	git "gopkg.in/src-d/go-git.v4"
+
+	"github.com/benhinchley/pit/internals/testparser"
 )
 
-type Package struct {
-	Name string
-}
+// FindPackages returns a slice of Packages found in the passed directory.
+func FindPackages(wd string) ([]*Package, error) {
+	ctx := build.Default
 
-func Packages() ([]Package, error) {
-	result := []Package{}
-
-	cmd := exec.Command("go", "list", "./...")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	if err := cmd.Run(); err != nil {
-		return result, fmt.Errorf("unable to run \"go list ./...\": %s", err)
-	}
-
-	pkgs := strings.Split(strings.TrimSpace(out.String()), "\n")
-	for _, pkg := range pkgs {
-		result = append(result, Package{
-			Name: pkg,
+	var res []*Package
+	for dir := range findDir(wd) {
+		pkg, err := ctx.ImportDir(dir, build.IgnoreVendor)
+		if err != nil {
+			if _, ok := err.(*build.NoGoError); ok {
+				continue
+			}
+			return nil, err
+		}
+		res = append(res, &Package{
+			Name:        pkg.Name,
+			Dir:         pkg.Dir,
+			ImportPath:  pkg.ImportPath,
+			SourceFiles: pkg.GoFiles,
+			TestFiles:   pkg.TestGoFiles,
 		})
 	}
-
-	return result, nil
+	return res, nil
 }
 
-func (p Package) Sources() ([]string, error) {
-	result := []string{}
-	cmd := exec.Command("go", "list", "-f", "'{{ join .GoFiles \",\" }}'", p.Name)
-	var out bytes.Buffer
-	cmd.Stdout = &out
+func findDir(p string) <-chan string {
+	w := make(fileWalk)
+	go func() {
+		if err := filepath.Walk(p, w.Walk); err != nil {
+			log.Printf("error: %s", err)
+		}
+		close(w)
+	}()
+	return w
+}
 
-	if err := cmd.Run(); err != nil {
-		return result, fmt.Errorf("unable to run \"go list -f '{{ join .GoFiles \",\" }}' %s\": %s", p.Name, err)
-	}
+type fileWalk chan string
 
-	re, err := regexp.Compile(`(\w+.go)`)
+func (f fileWalk) Walk(path string, info os.FileInfo, err error) error {
 	if err != nil {
-		return result, fmt.Errorf("unable to compile regex `(\\w+.go)`: %s", err)
+		return err
 	}
-	for _, match := range re.FindAllString(strings.TrimSpace(out.String()), -1) {
-		result = append(result, match)
+	if info.IsDir() {
+		if !strings.Contains(path, "vendor") && !strings.Contains(path, ".git") {
+			f <- path
+		}
 	}
-
-	return result, nil
+	return nil
 }
 
-func (p Package) Tests() ([]string, error) {
-	result := []string{}
+type Package struct {
+	Name        string
+	Dir         string
+	ImportPath  string
+	SourceFiles []string
+	TestFiles   []string
 
-	cmd := exec.Command("go", "list", "-f", "'{{ join .TestGoFiles \",\" }}'", p.Name)
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	// Some of these are a little time consuming to create
+	repo     *git.Repository
+	worktree *git.Worktree
+	status   map[string]*git.FileStatus
+}
 
-	if err := cmd.Run(); err != nil {
-		return result, fmt.Errorf("unable to run \"go list -f '{{ join .TestGoFiles \",\" }}' %s\": %s", p.Name, err)
+// Repository returns the git repository for the package
+func (p *Package) Repository() (*git.Repository, error) {
+	if p.repo == nil {
+		if exists(filepath.Join(p.Dir, ".git")) {
+			r, err := git.PlainOpen(p.Dir)
+			if err != nil {
+				return nil, fmt.Errorf("unable to open repository: %v", err)
+			}
+			p.repo = r
+			return r, nil
+		}
+
+		// Search upwards until we find the git toplevel
+		// git rev-parse --show-toplevel
+		// NOTE: This is not the smartest impl as if you are not in a git dir
+		// It will just block here until it errors out saying it can't
+		// any higher than /
+		path, _ := filepath.Rel(p.Dir, filepath.Join(p.Dir, ".git"))
+		for {
+			if exists(path) {
+				r, err := git.PlainOpen(filepath.Dir(path))
+				if err != nil {
+					return nil, fmt.Errorf("unable to open repository: %v", err)
+				}
+				p.repo = r
+				return r, nil
+			}
+			path = filepath.Join("../", path)
+		}
 	}
 
-	re, err := regexp.Compile(`(\w+.go)`)
+	return p.repo, nil
+}
+
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
+
+// RunTests runs the packages test suite, checking if the package has tests
+// and whether any files have been changed
+func (p *Package) RunTests() (*testparser.PackageResult, error) {
+	ok, err := p.hasChangedFiles()
 	if err != nil {
-		return result, fmt.Errorf("unable to compile regex `(\\w+.go)`: %s", err)
+		return nil, err
 	}
-	for _, match := range re.FindAllString(strings.TrimSpace(out.String()), -1) {
-		result = append(result, match)
+	if !ok {
+		return &testparser.PackageResult{
+			Name:    p.ImportPath,
+			Status:  testparser.StatusSkip,
+			Summary: "[no changed files]",
+		}, nil
 	}
 
-	return result, nil
+	if !p.hasTestFiles() {
+		return &testparser.PackageResult{
+			Name:    p.ImportPath,
+			Status:  testparser.StatusSkip,
+			Summary: "[no test files]",
+		}, nil
+	}
+
+	var out bytes.Buffer
+	cmd := exec.Command("go", "test", "-v", "-cover", p.ImportPath)
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	cmd.Run()
+
+	r, err := testparser.Parse(&out)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse test output: %v", err)
+	}
+
+	return r[0], nil
 }
 
-func NamedDiffFiles(files []string) ([]string, error) {
-	args := []string{"add", "-N"}
-	args = append(args, files...)
-
-	cmd := exec.Command("git", args...)
-
-	if err := cmd.Run(); err != nil {
-		return []string{}, fmt.Errorf("unable to run \"git add -N %s\": %s", strings.Join(args, " "), err)
+func (p *Package) hasChangedFiles() (bool, error) {
+	if p.repo == nil {
+		if _, err := p.Repository(); err != nil {
+			return false, err
+		}
 	}
 
-	args = []string{"diff", "--name-only", "HEAD"}
-	cmd = exec.Command("git", args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-
-	if err := cmd.Run(); err != nil {
-		return []string{}, fmt.Errorf("unable to run \"git diff --name-only HEAD\": %s", err)
+	if p.worktree == nil {
+		t, err := p.repo.Worktree()
+		if err != nil {
+			return false, err
+		}
+		p.worktree = t
 	}
 
-	r := strings.Split(strings.TrimSpace(out.String()), "\n")
-
-	cmd = exec.Command("git", "reset")
-
-	if err := cmd.Run(); err != nil {
-		return []string{}, fmt.Errorf("unable to run \"git reset\": %s", err)
+	if p.status == nil {
+		s, err := p.worktree.Status()
+		if err != nil {
+			return false, err
+		}
+		p.status = s
 	}
 
-	return r, nil
+	// The following block of code seems a bit wasteful
+	files := []string{}
+	for file, status := range p.status {
+		if status.Worktree != git.Unmodified {
+			files = append(files, file)
+		}
+	}
+
+	files = filter(files, func(p string) bool {
+		return path.Ext(p) == ".go"
+	})
+
+	if len(files) > 0 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func filter(vs []string, f func(string) bool) []string {
+	r := make([]string, 0)
+	for _, v := range vs {
+		if f(v) {
+			r = append(r, v)
+		}
+	}
+	return r
+}
+
+func (p *Package) hasTestFiles() bool {
+	switch len(p.TestFiles) {
+	case 0:
+		return false
+	default:
+		return true
+	}
 }

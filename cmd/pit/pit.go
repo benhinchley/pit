@@ -2,131 +2,70 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"os/exec"
-	"path"
-	"path/filepath"
 	"strings"
 
-	"github.com/benhinchley/pit/internals/testparser"
+	"github.com/intel/tfortools"
 
 	"github.com/benhinchley/cmd"
-
-	git "gopkg.in/src-d/go-git.v4"
+	"github.com/benhinchley/pit"
+	"github.com/benhinchley/pit/internals/testparser"
 )
 
-type pitCommand struct{}
+var defaultTemplate = `
+{{tablex (cols . "Name" "Status" "Duration" "Coverage" "Summary") 8 8 4 "Package" }}
 
-func (cmd *pitCommand) Name() string           { return "pit" }
-func (cmd *pitCommand) Args() string           { return "" }
-func (cmd *pitCommand) Desc() string           { return "smartish wrapper around go test" }
-func (cmd *pitCommand) Help() string           { return "TODO" }
-func (cmd *pitCommand) Register(*flag.FlagSet) {}
+{{- range . -}}{{if gt (len .Tests) 0}}
+Package: {{println .Name}}
+{{- cols .Tests "Name" "Duration" "Status" | table}}
+{{- end}}{{- end}}
+`
+
+type pitCommand struct {
+	template string
+	json     bool
+}
+
+func (cmd *pitCommand) Name() string { return "pit" }
+func (cmd *pitCommand) Args() string { return "[-f format] [-json]" }
+func (cmd *pitCommand) Desc() string { return "smartish wrapper around go test" }
+func (cmd *pitCommand) Help() string { return "TODO" }
+func (cmd *pitCommand) Register(fs *flag.FlagSet) {
+	fs.StringVar(&cmd.template, "f", strings.TrimSpace(defaultTemplate), "output template")
+	fs.BoolVar(&cmd.json, "json", false, "print test result data in json format.")
+}
 
 func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
-	cf, err := changedFiles(ctx.(*context).WDPackage, ctx.(*context).Repository)
+	wd := ctx.(*context).WorkingDir
+
+	pkgs, err := pit.FindPackages(wd)
 	if err != nil {
-		return fmt.Errorf("%s: %v", cmd.Name(), err)
+		return fmt.Errorf("unable to find packages: %v", err)
 	}
 
-	if len(cf) == 0 {
-		ctx.Stderr().Println("no changes")
-		return nil
-	}
-
-	cp := changedPackages(cf)
-
-	// TODO: Setup some sort of work pool for this
-	for _, chpkg := range cp {
-		for _, pkg := range ctx.(*context).Packages {
-			if pkg.Name == chpkg {
-				tests, err := pkg.Tests()
-				if err != nil {
-					ctx.Stderr().Printf("unable to get test files for %s: %v\n", pkg.Name, err)
-					continue
-				}
-
-				if len(tests) == 0 {
-					ctx.Stderr().Printf("no tests for %s\n", pkg.Name)
-					continue
-				}
-
-				var b bytes.Buffer
-				gtc := exec.Command("go", "test", "-v", "-cover", pkg.Name)
-				gtc.Stdout = &b
-				gtc.Stderr = &b
-				gtc.Run()
-
-				r, err := testparser.Parse(&b)
-				if err != nil {
-					return fmt.Errorf("unable to parse test output: %v", err)
-				}
-
-				out, err := json.MarshalIndent(r, "", " ")
-				if err != nil {
-					return fmt.Errorf("unable to marshal output: %v", err)
-				}
-
-				ctx.Stdout().Print(string(out))
-			}
+	var results []*testparser.PackageResult
+	for _, pkg := range pkgs {
+		r, err := pkg.RunTests()
+		if err != nil {
+			return fmt.Errorf("unable to run test for \"%s\": %v", pkg.ImportPath, err)
 		}
+		results = append(results, r)
 	}
+
+	tmpl := cmd.template
+	if cmd.json {
+		tmpl = "{{tojson .}}"
+	}
+
+	t, err := tfortools.CreateTemplate("pit", tmpl, ctx.(*context).TemplateConfig)
+	if err != nil {
+		return err
+	}
+
+	var out bytes.Buffer
+	t.Execute(&out, results)
+	ctx.Stdout().Print(out.String())
 
 	return nil
-}
-
-func changedFiles(p string, r *git.Repository) ([]string, error) {
-	f := []string{}
-	w, err := r.Worktree()
-	if err != nil {
-		return f, fmt.Errorf("unable to get repository worktree: %s", err)
-	}
-	s, err := w.Status()
-	if err != nil {
-		return f, fmt.Errorf("unable to worktree status: %s", err)
-	}
-
-	for file, status := range s {
-		if status.Worktree != git.Unmodified {
-			f = append(f, filepath.Join(p, strings.TrimRight(file, ",")))
-		}
-	}
-	f = filter(f, func(s string) bool {
-		return path.Ext(s) == ".go"
-	})
-
-	return f, nil
-}
-
-func changedPackages(f []string) []string {
-	r := []string{}
-	for _, file := range f {
-		r = append(r, filepath.Dir(file))
-	}
-	return removeDuplicates(r)
-}
-
-func filter(vs []string, f func(string) bool) []string {
-	r := make([]string, 0)
-	for _, v := range vs {
-		if f(v) {
-			r = append(r, v)
-		}
-	}
-	return r
-}
-
-func removeDuplicates(d []string) []string {
-	s := map[string]bool{}
-	r := []string{}
-
-	for v := range d {
-		if s[d[v]] != true {
-			s[d[v]] = true
-			r = append(r, d[v])
-		}
-	}
-	return r
 }

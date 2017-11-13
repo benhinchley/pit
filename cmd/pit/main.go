@@ -2,15 +2,11 @@ package main
 
 import (
 	"fmt"
-	"go/build"
 	"log"
 	"os"
-	"path/filepath"
 
 	"github.com/benhinchley/cmd"
-	"github.com/benhinchley/pit"
-
-	git "gopkg.in/src-d/go-git.v4"
+	"github.com/intel/tfortools"
 )
 
 func main() {
@@ -23,31 +19,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := p.Run(func(env cmd.Environment, c cmd.Command, args []string) error {
+	if err := p.Run(func(env *cmd.Environment, c cmd.Command, args []string) error {
 		stdout, stderr := env.GetLoggers()
-		wd := env.WorkingDir()
 
-		//TODO: search for `.git` dir in wd, then search upwards until we hit $GOPATH
-
-		r, err := git.PlainOpen(wd)
-		if err != nil {
-			return fmt.Errorf("%s: unable to open repository: %v", c.Name(), err)
-		}
-
-		p, _ := filepath.Rel(filepath.Join(build.Default.GOPATH, "src"), wd)
-
-		pkgs, err := pit.Packages()
-		if err != nil {
-			return fmt.Errorf("%s: unable to list packages: %v", c.Name(), err)
-		}
+		cfg := tfortools.NewConfig(tfortools.OptAllFns)
 
 		ctx := &context{
-			WorkingDir: wd,
-			WDPackage:  p,
-			Repository: r,
-			Packages:   pkgs,
-			out:        stdout,
-			err:        stderr,
+			WorkingDir:     env.WorkingDir,
+			TemplateConfig: cfg,
+			out:            stdout,
+			err:            stderr,
 		}
 		if err := c.Run(ctx, args); err != nil {
 			return fmt.Errorf("%s: %v", c.Name(), err)
@@ -60,10 +41,8 @@ func main() {
 }
 
 type context struct {
-	WorkingDir string
-	WDPackage  string
-	Repository *git.Repository
-	Packages   []pit.Package
+	WorkingDir     string
+	TemplateConfig *tfortools.Config
 
 	out, err *log.Logger
 }

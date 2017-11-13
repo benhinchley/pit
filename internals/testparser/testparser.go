@@ -31,7 +31,7 @@ type PackageResult struct {
 	Coverage float32       `json:"coverage"`
 	Summary  string        `json:"summary"`
 	Tests    []*Test       `json:"tests"`
-	Output   []*FailLine   `json:"-"`
+	Errors   []*FailLine   `json:"errors"`
 }
 
 func (pr *PackageResult) MarshalJSON() ([]byte, error) {
@@ -152,7 +152,7 @@ func Parse(r io.Reader) ([]*PackageResult, error) {
 			}
 
 			if len(fails) > 0 {
-				pkg.Output = fails
+				pkg.Errors = fails
 			}
 
 			pkgs = append(pkgs, pkg)

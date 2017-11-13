@@ -1,6 +1,22 @@
 {
-    "memo": "3cbb6874488494377781ed4e38685a67a13b87057099f2a8eb6be2f3327d88e6",
+    "memo": "7cb571eb5cfe96816f72b763522ebdf00708778537535b01199f355c546795d3",
     "projects": [
+        {
+            "name": "github.com/benhinchley/cmd",
+            "branch": "master",
+            "revision": "f7cfee514a59bd31679292f684adf9605dc34570",
+            "packages": [
+                "."
+            ]
+        },
+        {
+            "name": "github.com/intel/tfortools",
+            "version": "v0.1.0",
+            "revision": "17d5d83d1fd0b0ebc968937511964f9f79582243",
+            "packages": [
+                "."
+            ]
+        },
         {
             "name": "github.com/jbenet/go-context",
             "branch": "master",
@@ -20,7 +36,7 @@
         {
             "name": "github.com/sergi/go-diff",
             "branch": "master",
-            "revision": "feef008d51ad2b3778f85d387ccf91735543008d",
+            "revision": "1744e2970ca51c86172c8190fadad617561ed6e7",
             "packages": [
                 "diffmatchpatch"
             ]
@@ -47,7 +63,7 @@
         {
             "name": "golang.org/x/crypto",
             "branch": "master",
-            "revision": "9419663f5a44be8b34ca85f08abc5fe1be11f8a3",
+            "revision": "6a293f2d4b14b8e6d3f0539e383f6d0d30fce3fd",
             "packages": [
                 "curve25519",
                 "ed25519",
@@ -60,7 +76,7 @@
         {
             "name": "golang.org/x/net",
             "branch": "master",
-            "revision": "1087133bc4af3073e18add999345c6ae75918503",
+            "revision": "a337091b0525af65de94df2eb7e98bd9962dcbe2",
             "packages": [
                 "context"
             ]
@@ -68,7 +84,7 @@
         {
             "name": "golang.org/x/text",
             "branch": "master",
-            "revision": "c01e4764d870b77f8abe5096ee19ad20d80e8075",
+            "revision": "88f656faf3f37f690df1a32515b479415e1a6769",
             "packages": [
                 "internal/gen",
                 "internal/triegen",

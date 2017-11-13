@@ -171,16 +171,18 @@ func (p *Package) hasChangedFiles() (bool, error) {
 		p.status = s
 	}
 
-	// The following block of code seems a bit wasteful
 	files := []string{}
 	for file, status := range p.status {
 		if status.Worktree != git.Unmodified {
-			files = append(files, file)
+			files = append(files, filepath.Join(p.repoDir, file))
 		}
 	}
 
-	files = filter(files, func(p string) bool {
-		return path.Ext(p) == ".go"
+	files = filter(files, func(s string) bool {
+		if filepath.Dir(strings.TrimPrefix(s, p.Dir)) == "/" {
+			return path.Ext(s) == ".go"
+		}
+		return false
 	})
 
 	if len(files) > 0 {

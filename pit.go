@@ -113,17 +113,19 @@ func exists(p string) bool {
 
 // RunTests runs the packages test suite, checking if the package has tests
 // and whether any files have been changed
-func (p *Package) RunTests() (*testparser.PackageResult, error) {
-	ok, err := p.hasChangedFiles()
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return &testparser.PackageResult{
-			Name:    p.ImportPath,
-			Status:  testparser.StatusSkip,
-			Summary: "[no changed files]",
-		}, nil
+func (p *Package) RunTests(all bool) (*testparser.PackageResult, error) {
+	if !all {
+		ok, err := p.hasChangedFiles()
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return &testparser.PackageResult{
+				Name:    p.ImportPath,
+				Status:  testparser.StatusSkip,
+				Summary: "[no changed files]",
+			}, nil
+		}
 	}
 
 	if !p.hasTestFiles() {

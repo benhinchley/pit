@@ -25,6 +25,7 @@ Package: {{println .Name}}
 type pitCommand struct {
 	template string
 	json     bool
+	all      bool
 }
 
 func (cmd *pitCommand) Name() string { return "pit" }
@@ -33,6 +34,7 @@ func (cmd *pitCommand) Desc() string { return "smartish wrapper around go test" 
 func (cmd *pitCommand) Help() string { return "TODO" }
 func (cmd *pitCommand) Register(fs *flag.FlagSet) {
 	fs.StringVar(&cmd.template, "f", strings.TrimSpace(defaultTemplate), "output template")
+	fs.BoolVar(&cmd.all, "all", false, "run all tests.")
 	fs.BoolVar(&cmd.json, "json", false, "print test result data in json format.")
 }
 
@@ -46,7 +48,7 @@ func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
 
 	var results []*testparser.PackageResult
 	for _, pkg := range pkgs {
-		r, err := pkg.RunTests()
+		r, err := pkg.RunTests(cmd.all)
 		if err != nil {
 			return fmt.Errorf("unable to run test for \"%s\": %v", pkg.ImportPath, err)
 		}

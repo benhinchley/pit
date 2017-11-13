@@ -74,6 +74,7 @@ type Package struct {
 	TestFiles   []string
 
 	// Some of these are a little time consuming to create
+	repoDir  string
 	repo     *git.Repository
 	worktree *git.Worktree
 	status   map[string]*git.FileStatus
@@ -82,31 +83,20 @@ type Package struct {
 // Repository returns the git repository for the package
 func (p *Package) Repository() (*git.Repository, error) {
 	if p.repo == nil {
-		if exists(filepath.Join(p.Dir, ".git")) {
-			r, err := git.PlainOpen(p.Dir)
-			if err != nil {
-				return nil, fmt.Errorf("unable to open repository: %v", err)
-			}
+		if r, err := git.PlainOpen(p.Dir); err == nil {
+			p.repoDir = p.Dir
 			p.repo = r
 			return r, nil
 		}
 
-		// Search upwards until we find the git toplevel
-		// git rev-parse --show-toplevel
-		// NOTE: This is not the smartest impl as if you are not in a git dir
-		// It will just block here until it errors out saying it can't
-		// any higher than /
-		path, _ := filepath.Rel(p.Dir, filepath.Join(p.Dir, ".git"))
+		path := filepath.Join(p.Dir, "../")
 		for {
-			if exists(path) {
-				r, err := git.PlainOpen(filepath.Dir(path))
-				if err != nil {
-					return nil, fmt.Errorf("unable to open repository: %v", err)
-				}
+			if r, err := git.PlainOpen(path); err == nil {
+				p.repoDir = path
 				p.repo = r
 				return r, nil
 			}
-			path = filepath.Join("../", path)
+			path = filepath.Join(path, "../")
 		}
 	}
 

@@ -33,6 +33,12 @@ ok  	github.com/benhinchley/testymctestface	0.006s	coverage: 100.0% of statement
 FAIL	github.com/benhinchley/testymctestface/foo [build failed]
 `
 
+var failedBuild2 = `
+# github.com/benhinchley/pit
+./pit_test.go:7:2: imported and not used: "github.com/sanity-io/litter"
+FAIL	github.com/benhinchley/pit [build failed]
+`
+
 var failedSetup = `
 # github.com/benhinchley/pit/internals/testparser
 internals/testparser/testparser_test.go:47:15: missing ',' before newline in argument list
@@ -45,6 +51,7 @@ func TestParse(t *testing.T) {
 	tests := []string{
 		basic,
 		failedBuild,
+		failedBuild2,
 		failedSetup,
 	}
 	for _, test := range tests {

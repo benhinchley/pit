@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	p, err := cmd.NewProgram("pit", "smartish wrapper around go test", &pitCommand{}, nil)
+	p, err := cmd.NewProgram("pit", "", &pitCommand{}, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

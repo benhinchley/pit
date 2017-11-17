@@ -143,10 +143,14 @@ func (p *Package) RunTests(config *TestConfig) (*PackageTestResult, error) {
 		}
 	}
 
+	goTestArgs := []string{"test", "-v", "-cover"}
+	if config.Args != nil {
+		goTestArgs = append(goTestArgs, config.Args...)
 	}
+	goTestArgs = append(goTestArgs, p.ImportPath)
 
 	var out bytes.Buffer
-	cmd := exec.Command("go", "test", "-v", "-cover", p.ImportPath)
+	cmd := exec.Command("go", goTestArgs...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	cmd.Run()

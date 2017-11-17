@@ -111,9 +111,16 @@ func exists(p string) bool {
 	return true
 }
 
+// TestConfig defines how a packages tests will be run
+type TestConfig struct {
+	RunAll     bool
+	CommitHash string
+	Args       []string
+}
+
 // RunTests runs the packages test suite, checking if the package has tests
 // and whether any files have been changed
-func (p *Package) RunTests(all bool) (*PackageTestResult, error) {
+func (p *Package) RunTests(config *TestConfig) (*PackageTestResult, error) {
 	if !p.hasTestFiles() {
 		return &PackageTestResult{
 			Name:    p.ImportPath,
@@ -122,7 +129,7 @@ func (p *Package) RunTests(all bool) (*PackageTestResult, error) {
 		}, nil
 	}
 
-	if !all {
+	if !config.RunAll {
 		ok, err := p.hasChangedFiles()
 		if err != nil {
 			return nil, err

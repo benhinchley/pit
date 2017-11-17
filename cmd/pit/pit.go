@@ -51,7 +51,9 @@ func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
 
 	var results []*pit.PackageTestResult
 	for _, pkg := range pkgs {
-		r, err := pkg.RunTests(cmd.all)
+		r, err := pkg.RunTests(&pit.TestConfig{
+			RunAll: cmd.all,
+		})
 		if err != nil {
 			return fmt.Errorf("unable to run test for \"%s\": %v", pkg.ImportPath, err)
 		}

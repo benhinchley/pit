@@ -113,27 +113,29 @@ func exists(p string) bool {
 
 // RunTests runs the packages test suite, checking if the package has tests
 // and whether any files have been changed
-func (p *Package) RunTests(all bool) (*testparser.PackageResult, error) {
+func (p *Package) RunTests(all bool) (*PackageTestResult, error) {
+	if !p.hasTestFiles() {
+		return &PackageTestResult{
+			Name:    p.ImportPath,
+			Status:  testparser.StatusSkip.String(),
+			Summary: "[no test files]",
+		}, nil
+	}
+
 	if !all {
 		ok, err := p.hasChangedFiles()
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			return &testparser.PackageResult{
+			return &PackageTestResult{
 				Name:    p.ImportPath,
-				Status:  testparser.StatusSkip,
+				Status:  testparser.StatusSkip.String(),
 				Summary: "[no changed files]",
 			}, nil
 		}
 	}
 
-	if !p.hasTestFiles() {
-		return &testparser.PackageResult{
-			Name:    p.ImportPath,
-			Status:  testparser.StatusSkip,
-			Summary: "[no test files]",
-		}, nil
 	}
 
 	var out bytes.Buffer
@@ -147,7 +149,7 @@ func (p *Package) RunTests(all bool) (*testparser.PackageResult, error) {
 		return nil, fmt.Errorf("unable to parse test output: %v", err)
 	}
 
-	return r[0], nil
+	return fromTestparser(r[0]), nil
 }
 
 func (p *Package) hasChangedFiles() (bool, error) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/benhinchley/cmd"
 	"github.com/benhinchley/pit"
-	"github.com/benhinchley/pit/internals/testparser"
 )
 
 var defaultTemplate = `
@@ -50,7 +49,7 @@ func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
 		return fmt.Errorf("unable to find packages: %v", err)
 	}
 
-	var results []*testparser.PackageResult
+	var results []*pit.PackageTestResult
 	for _, pkg := range pkgs {
 		r, err := pkg.RunTests(cmd.all)
 		if err != nil {

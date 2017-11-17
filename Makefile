@@ -13,6 +13,9 @@ test: build $(TESTS)
 build: bin/$(BINARY)
 bin/$(BINARY): $(SRC)
 	@go build -o $@ ./cmd/$(BINARY)
+
+install: $(SRC)
+	@go install ./cmd/$(BINARY)
 	
 deps:
 	@dep ensure
@@ -20,4 +23,4 @@ deps:
 clean:
 	@rm -v bin/*; trap
 
-.PHONY: format test build deps clean
+.PHONY: format test build install deps clean

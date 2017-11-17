@@ -3,7 +3,6 @@ package testparser
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,22 +33,11 @@ type PackageResult struct {
 	Errors   []*FailLine   `json:"errors"`
 }
 
-func (pr *PackageResult) MarshalJSON() ([]byte, error) {
-	type Alias PackageResult
-	return json.Marshal(&struct {
-		Duration string `json:"duration"`
-		*Alias
-	}{
-		Duration: pr.Duration.String(),
-		Alias:    (*Alias)(pr),
-	})
-}
-
 type FailLine struct {
-	File    string
-	Row     int
-	Column  int
-	Message string
+	File    string `json:"filename"`
+	Row     int    `json:"row"`
+	Column  int    `json:"column"`
+	Message string `json:"message"`
 }
 
 func (fl *FailLine) String() string {
@@ -60,20 +48,7 @@ type Test struct {
 	Name     string        `json:"name"`
 	Status   Status        `json:"status"`
 	Duration time.Duration `json:"duration"`
-	Output   bytes.Buffer  `json:"output"`
-}
-
-func (t *Test) MarshalJSON() ([]byte, error) {
-	type Alias Test
-	return json.Marshal(&struct {
-		Output   string `json:"output"`
-		Duration string `json:"duration"`
-		*Alias
-	}{
-		Output:   t.Output.String(),
-		Duration: t.Duration.String(),
-		Alias:    (*Alias)(t),
-	})
+	Output   []string      `json:"output"`
 }
 
 type Status int
@@ -136,7 +111,7 @@ func Parse(r io.Reader) ([]*PackageResult, error) {
 
 			d, err := time.ParseDuration(duration(matches[3]))
 			if err != nil {
-				return nil, fmt.Errorf("testparser: unable to parse duration: %v", err)
+				return nil, fmt.Errorf("testparser: RegexResult: unable to parse duration: %v", err)
 			}
 
 			pkg := &PackageResult{
@@ -183,7 +158,7 @@ func Parse(r io.Reader) ([]*PackageResult, error) {
 			// debug.Println("RegexOutput Matches:", litter.Sdump(matches))
 
 			if t := getTest(tests, currentTestName); t != nil {
-				fmt.Fprintln(&t.Output, matches[2])
+				t.Output = append(t.Output, matches[2])
 			}
 		} else if RegexFail.MatchString(line) {
 			matches := RegexFail.FindStringSubmatch(line)

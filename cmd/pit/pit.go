@@ -32,7 +32,7 @@ type pitCommand struct {
 }
 
 func (cmd *pitCommand) Name() string { return "pit" }
-func (cmd *pitCommand) Args() string { return "[-f format] [-json]" }
+func (cmd *pitCommand) Args() string { return "[-f format] [-json] [commit hash]" }
 func (cmd *pitCommand) Desc() string { return "smartish wrapper around go test" }
 func (cmd *pitCommand) Help() string { return "TODO" }
 func (cmd *pitCommand) Register(fs *flag.FlagSet) {
@@ -42,6 +42,10 @@ func (cmd *pitCommand) Register(fs *flag.FlagSet) {
 }
 
 func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
+	if len(args) > 1 {
+		return fmt.Errorf("too many arguments provided")
+	}
+
 	wd := ctx.(*context).WorkingDir
 
 	pkgs, err := pit.FindPackages(wd)
@@ -49,11 +53,17 @@ func (cmd *pitCommand) Run(ctx cmd.Context, args []string) error {
 		return fmt.Errorf("unable to find packages: %v", err)
 	}
 
+	tcfg := &pit.TestConfig{
+		RunAll: cmd.all,
+	}
+
+	if len(args) == 1 {
+		tcfg.CommitHash = args[0]
+	}
+
 	var results []*pit.PackageTestResult
 	for _, pkg := range pkgs {
-		r, err := pkg.RunTests(&pit.TestConfig{
-			RunAll: cmd.all,
-		})
+		r, err := pkg.RunTests(tcfg)
 		if err != nil {
 			return fmt.Errorf("unable to run test for \"%s\": %v", pkg.ImportPath, err)
 		}

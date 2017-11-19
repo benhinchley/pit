@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	git "gopkg.in/src-d/go-git.v4"
@@ -89,6 +90,7 @@ func (p *Package) Repository() (*git.Repository, error) {
 			return r, nil
 		}
 
+		// search upwards until we find a .git directory.
 		path := filepath.Join(p.Dir, "../")
 		for {
 			if r, err := git.PlainOpen(path); err == nil {
@@ -129,21 +131,21 @@ func (p *Package) RunTests(config *TestConfig) (*PackageTestResult, error) {
 		}, nil
 	}
 
-	if !config.RunAll {
-		ok, err := p.hasChangedFiles()
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return &PackageTestResult{
-				Name:    p.ImportPath,
-				Status:  testparser.StatusSkip.String(),
-				Summary: "[no changed files]",
-			}, nil
-		}
+	tests, err := p.determineTestsToRun(config.CommitHash)
+	if err != nil {
+		return nil, fmt.Errorf("unable to determine tests to run: %v", err)
 	}
 
-	goTestArgs := []string{"test", "-v", "-cover"}
+	// no changed files or tests to run
+	if tests == nil {
+		return &PackageTestResult{
+			Name:    p.ImportPath,
+			Status:  testparser.StatusSkip.String(),
+			Summary: "[no changed files]",
+		}, nil
+	}
+
+	goTestArgs := []string{"test", "-v", "-cover", "-run", tests.String()}
 	if config.Args != nil {
 		goTestArgs = append(goTestArgs, config.Args...)
 	}
@@ -163,30 +165,45 @@ func (p *Package) RunTests(config *TestConfig) (*PackageTestResult, error) {
 	return fromTestparser(r[0]), nil
 }
 
-func (p *Package) hasChangedFiles() (bool, error) {
-	if p.repo == nil {
-		if _, err := p.Repository(); err != nil {
-			return false, err
-		}
-	}
-
-	if p.worktree == nil {
-		t, err := p.repo.Worktree()
+// determineTestsToRun returns a regexp that can be passed to
+// the `-run` flag of `go test`.
+func (p *Package) determineTestsToRun(hash string) (*regexp.Regexp, error) {
+	if hash == "" {
+		dirty, _, err := p.hasDirtyWorktree()
 		if err != nil {
-			return false, err
+			return nil, fmt.Errorf("unable to determine worktree state: %v", err)
 		}
-		p.worktree = t
+		if !dirty {
+			return nil, nil
+		}
+
+		return regexp.Compile(`^Test`)
 	}
 
-	if p.status == nil {
-		s, err := p.worktree.Status()
-		if err != nil {
-			return false, err
-		}
-		p.status = s
-	}
+	return nil, fmt.Errorf("comparing against a commit hash is not yet implemented")
+}
 
+func (p *Package) hasDirtyWorktree() (bool, []string, error) {
 	files := []string{}
+
+	if r, err := p.Repository(); err == nil {
+		p.repo = r
+	} else {
+		return false, files, err
+	}
+
+	if w, err := p.repo.Worktree(); err == nil {
+		p.worktree = w
+	} else {
+		return false, files, err
+	}
+
+	if s, err := p.worktree.Status(); err == nil {
+		p.status = s
+	} else {
+		return false, files, err
+	}
+
 	for file, status := range p.status {
 		if status.Worktree != git.Unmodified {
 			files = append(files, filepath.Join(p.repoDir, file))
@@ -200,15 +217,11 @@ func (p *Package) hasChangedFiles() (bool, error) {
 		return false
 	})
 
-	if len(files) > 0 {
-		return true, nil
-	}
-
-	return false, nil
+	return len(files) > 0, files, nil
 }
 
 func filter(vs []string, f func(string) bool) []string {
-	r := make([]string, 0)
+	r := []string{}
 	for _, v := range vs {
 		if f(v) {
 			r = append(r, v)

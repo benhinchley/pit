@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	git "gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/plumbing"
+	"gopkg.in/src-d/go-git.v4/plumbing/object"
 
 	"github.com/benhinchley/pit/internals/testparser"
 )
@@ -172,6 +174,14 @@ func (p *Package) determineTestsToRun(hash string) (*regexp.Regexp, error) {
 		return regexp.Compile(`^Test`)
 	}
 
+	dirty, _, err := p.getChangedFiles(hash)
+	if err != nil {
+		return nil, fmt.Errorf("unable to determine changed files between trees: %v", err)
+	}
+	if !dirty {
+		return nil, nil
+	}
+
 	return nil, fmt.Errorf("comparing against a commit hash is not yet implemented")
 }
 
@@ -208,6 +218,46 @@ func (p *Package) hasDirtyWorktree() (dirty bool, files []string, err error) {
 	})
 
 	return len(files) > 0, files, nil
+}
+
+func (p *Package) getChangedFiles(hash string) (dirty bool, files []string, err error) {
+	if r, err := p.Repository(); err == nil {
+		p.repo = r
+	} else {
+		return dirty, files, err
+	}
+
+	hashCommit, err := p.repo.CommitObject(plumbing.NewHash(hash))
+	if err != nil {
+		return dirty, files, fmt.Errorf("unable to get commit object for %s: %v", hash, err)
+	}
+
+	head, err := p.repo.Head()
+	if err != nil {
+		return dirty, files, fmt.Errorf("unable to get current HEAD: %v", err)
+	}
+
+	headCommit, err := p.repo.CommitObject(head.Hash())
+	if err != nil {
+		return dirty, files, fmt.Errorf("unable to get commit object for current HEAD: %v", err)
+	}
+
+	hashTree, err := hashCommit.Tree()
+	if err != nil {
+		return dirty, files, fmt.Errorf("unable to get tree for %s: %v", hash, err)
+	}
+
+	headTree, err := headCommit.Tree()
+	if err != nil {
+		return dirty, files, fmt.Errorf("unable to get tree for current HEAD: %v", err)
+	}
+
+	_, err = object.DiffTree(hashTree, headTree)
+	if err != nil {
+		return dirty, files, fmt.Errorf("unable to get diff for trees: %v", err)
+	}
+
+	return true, files, err
 }
 
 func filter(vs []string, f func(string) bool) []string {

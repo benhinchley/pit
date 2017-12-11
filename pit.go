@@ -105,14 +105,6 @@ func (p *Package) Repository() (*git.Repository, error) {
 	return p.repo, nil
 }
 
-func exists(p string) bool {
-	_, err := os.Stat(p)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return true
-}
-
 // TestConfig defines how a packages tests will be run
 type TestConfig struct {
 	RunAll     bool
@@ -183,25 +175,23 @@ func (p *Package) determineTestsToRun(hash string) (*regexp.Regexp, error) {
 	return nil, fmt.Errorf("comparing against a commit hash is not yet implemented")
 }
 
-func (p *Package) hasDirtyWorktree() (bool, []string, error) {
-	files := []string{}
-
+func (p *Package) hasDirtyWorktree() (dirty bool, files []string, err error) {
 	if r, err := p.Repository(); err == nil {
 		p.repo = r
 	} else {
-		return false, files, err
+		return dirty, files, err
 	}
 
 	if w, err := p.repo.Worktree(); err == nil {
 		p.worktree = w
 	} else {
-		return false, files, err
+		return dirty, files, err
 	}
 
 	if s, err := p.worktree.Status(); err == nil {
 		p.status = s
 	} else {
-		return false, files, err
+		return dirty, files, err
 	}
 
 	for file, status := range p.status {

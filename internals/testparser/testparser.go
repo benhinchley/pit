@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,23 +16,25 @@ import (
 
 // Regular Expressions for various parts of the go test output
 var (
-	RegexTest     = regexp.MustCompile(`=== RUN (.+)`)
-	RegexStatus   = regexp.MustCompile(`^\s*--- (PASS|FAIL|SKIP): (.+) \((\d+\.\d+)(?: seconds|s)\)$`)
-	RegexCoverage = regexp.MustCompile(`^coverage:\s+(\d+\.\d+)%\s+of\s+statements(?:\sin\s.+)?$`)
-	RegexResult   = regexp.MustCompile(`^(ok|FAIL)\s+([^ ]+)\s+(?:(\d+\.\d+)s|(\[\w+ failed]))(?:\s+coverage:\s+(\d+\.\d+)%\sof\sstatements(?:\sin\s.+)?)?$`)
-	RegexOuput    = regexp.MustCompile(`(    )*\t(.*)`)
-	RegexSummary  = regexp.MustCompile(`^(PASS|FAIL|SKIP)$`)
-	RegexFail     = regexp.MustCompile(`(.*\w+.go)*:(\d+):(\d+):(.*\w+)`)
+	RegexTest      = regexp.MustCompile(`=== RUN (.+)`)
+	RegexStatus    = regexp.MustCompile(`^\s*--- (PASS|FAIL|SKIP): (.+) \((\d+\.\d+)(?: seconds|s)\)$`)
+	RegexCoverage  = regexp.MustCompile(`^coverage:\s+(\d+\.\d+)%\s+of\s+statements(?:\sin\s.+)?$`)
+	RegexResult    = regexp.MustCompile(`^(ok|FAIL)\s+([^ ]+)\s+(?:(\d+\.\d+)s|(\[\w+ failed]))(?:\s+coverage:\s+(\d+\.\d+)%\sof\sstatements(?:\sin\s.+)?)?$`)
+	RegexOuput     = regexp.MustCompile(`(    )*\t(.*)`)
+	RegexSummary   = regexp.MustCompile(`^(PASS|FAIL|SKIP)$`)
+	RegexFail      = regexp.MustCompile(`(.*\w+.go)*:(\d+):(\d+):(.*\w+)`)
+	RegexBenchmark = regexp.MustCompile(`(Benchmark\S+)[ ]+(\d+)[ ]+(\S+ \S+)`)
 )
 
 type PackageResult struct {
-	Name     string        `json:"name"`
-	Status   Status        `json:"status"`
-	Duration time.Duration `json:"duration"`
-	Coverage float32       `json:"coverage"`
-	Summary  string        `json:"summary"`
-	Tests    []*Test       `json:"tests"`
-	Errors   []*FailLine   `json:"errors"`
+	Name       string        `json:"name"`
+	Status     Status        `json:"status"`
+	Duration   time.Duration `json:"duration"`
+	Coverage   float32       `json:"coverage"`
+	Summary    string        `json:"summary"`
+	Tests      []*Test       `json:"tests"`
+	Benchmarks []*Benchmark  `json:"benchmarks"`
+	Errors     []*FailLine   `json:"errors"`
 }
 
 type FailLine struct {
@@ -49,6 +53,12 @@ type Test struct {
 	Status   Status        `json:"status"`
 	Duration time.Duration `json:"duration"`
 	Output   []string      `json:"output"`
+}
+
+type Benchmark struct {
+	Name    string `json:"name"`
+	Cycles  int    `json:"cycles"`
+	Summary string `json:"summary"`
 }
 
 type Status int
@@ -74,12 +84,13 @@ const (
 	StatusSkip
 )
 
-// var debug = log.New(os.Stderr, "testparser: ", 0)
+var debug = log.New(os.Stderr, "testparser: ", 0)
 
 // Parse ...
 func Parse(r io.Reader) ([]*PackageResult, error) {
 	var pkgs []*PackageResult
 	tests := []*Test{}
+	benchmarks := []*Benchmark{}
 	scanner := bufio.NewScanner(r)
 
 	duration := func(d string) string {
@@ -115,11 +126,12 @@ func Parse(r io.Reader) ([]*PackageResult, error) {
 			}
 
 			pkg := &PackageResult{
-				Name:     matches[2],
-				Status:   toStatus(matches[1]),
-				Coverage: coveragePercentage,
-				Duration: d,
-				Tests:    tests,
+				Name:       matches[2],
+				Status:     toStatus(matches[1]),
+				Coverage:   coveragePercentage,
+				Duration:   d,
+				Tests:      tests,
+				Benchmarks: benchmarks,
 			}
 
 			if matches[4] != "" {
@@ -132,6 +144,7 @@ func Parse(r io.Reader) ([]*PackageResult, error) {
 
 			pkgs = append(pkgs, pkg)
 			tests = []*Test{}
+			benchmarks = []*Benchmark{}
 			currentTestName = ""
 			coveragePercentage = 0.0
 		} else if RegexStatus.MatchString(line) {
@@ -171,6 +184,16 @@ func Parse(r io.Reader) ([]*PackageResult, error) {
 				Row:     row,
 				Column:  column,
 				Message: strings.TrimSpace(matches[4]),
+			})
+		} else if RegexBenchmark.MatchString(line) {
+			matches := RegexBenchmark.FindStringSubmatch(line)
+			// debug.Println("RegexBenchmark Matches:", litter.Sdump(matches))
+
+			cycles, _ := strconv.Atoi(matches[2])
+			benchmarks = append(benchmarks, &Benchmark{
+				Name:    matches[1],
+				Cycles:  cycles,
+				Summary: matches[3],
 			})
 		}
 	}

@@ -2,9 +2,10 @@ package testparser
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"testing"
+
+	"github.com/sanity-io/litter"
 )
 
 var basic = `
@@ -47,12 +48,24 @@ internals/testparser/testparser_test.go:52:3: missing ',' in argument list
 FAIL    github.com/benhinchley/pit/internals/testparser [setup failed]
 `
 
+var withBenchmark = `
+=== RUN   TestParse
+--- PASS: TestParse (0.00s)
+goos: darwin
+goarch: amd64
+pkg: github.com/benhinchley/pit/internals/testparser
+BenchmarkHello-4        20000000                64.5 ns/op
+PASS
+ok      github.com/benhinchley/pit/internals/testparser 1.374s
+`
+
 func TestParse(t *testing.T) {
 	tests := []string{
 		basic,
 		failedBuild,
 		failedBuild2,
 		failedSetup,
+		withBenchmark,
 	}
 	for _, test := range tests {
 		var b bytes.Buffer
@@ -61,8 +74,7 @@ func TestParse(t *testing.T) {
 		if r, err := Parse(&b); err != nil {
 			t.Error(err)
 		} else {
-			out, _ := json.MarshalIndent(r, "", " ")
-			t.Log(string(out))
+			t.Log(litter.Sdump(r))
 		}
 	}
 }
